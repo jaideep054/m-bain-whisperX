@@ -1,0 +1,42 @@
+# Docker Compose for local development and testing
+
+version: '3.8'
+
+services:
+  whisperx-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whisperx-cpu
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+      - whisperx-models:/app/models
+    environment:
+      - WHISPERX_MODEL=base
+      - HF_TOKEN=${HF_TOKEN}  # Set in .env file
+    command: whisperx /app/input/sample.mp3 --output_dir /app/output --model base
+
+  whisperx-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: whisperx-gpu
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+      - whisperx-models:/app/models
+    environment:
+      - WHISPERX_MODEL=large-v2
+      - HF_TOKEN=${HF_TOKEN}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: whisperx /app/input/sample.mp3 --output_dir /app/output --model large-v2 --device cuda
+
+volumes:
+  whisperx-models:

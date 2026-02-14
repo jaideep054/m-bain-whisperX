@@ -1,0 +1,45 @@
+# WhisperX Docker Image with GPU Support
+# For deployment on platforms with NVIDIA GPU support
+
+FROM nvidia/cuda:12.8.0-cudnn9-runtime-ubuntu22.04
+
+# Set working directory
+WORKDIR /app
+
+# Install Python 3.11 and system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    ffmpeg \
+    git \
+    wget \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symbolic links for python
+RUN ln -s /usr/bin/python3.11 /usr/bin/python && \
+    ln -s /usr/bin/python3.11 /usr/bin/python3
+
+# Copy project files
+COPY . .
+
+# Install whisperX with CUDA support
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cu128 && \
+    pip install --no-cache-dir -e .
+
+# Create directories for input/output
+RUN mkdir -p /app/input /app/output
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV WHISPERX_CACHE_DIR=/app/models
+ENV CUDA_VISIBLE_DEVICES=0
+
+# Expose port for API (if using web service)
+EXPOSE 8000
+
+# Default command
+CMD ["whisperx", "--help"]

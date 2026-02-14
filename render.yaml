@@ -1,0 +1,40 @@
+# Render Blueprint for WhisperX Deployment
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Web Service (API mode)
+  - type: web
+    name: whisperx-api
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter  # Change to 'standard' or higher for better performance
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: WHISPERX_MODEL
+        value: base  # Options: tiny, base, small, medium, large-v2, large-v3
+      - key: HF_TOKEN
+        sync: false  # Set this in Render dashboard for speaker diarization
+    # Disk for persistent model storage
+    disk:
+      name: whisperx-models
+      mountPath: /app/models
+      sizeGB: 10
+
+  # Background Worker (for async processing)
+  # Uncomment if you want a worker service instead of/in addition to API
+  # - type: worker
+  #   name: whisperx-worker
+  #   env: docker
+  #   dockerfilePath: ./Dockerfile
+  #   plan: starter
+  #   envVars:
+  #     - key: WHISPERX_MODEL
+  #       value: base
+  #     - key: HF_TOKEN
+  #       sync: false
+  #   disk:
+  #     name: whisperx-worker-models
+  #     mountPath: /app/models
+  #     sizeGB: 10
