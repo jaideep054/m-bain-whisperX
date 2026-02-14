@@ -47,10 +47,13 @@ uv.lock
 # Output files
 *.srt
 *.vtt
-*.txt
 *.tsv
-*.json
+output/*.txt
+output/*.json
 output/
+
+# But include requirements files
+!requirements*.txt
 
 # Model cache (will be downloaded at runtime)
 models/
