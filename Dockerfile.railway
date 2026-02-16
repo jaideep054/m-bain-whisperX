@@ -1,0 +1,47 @@
+# Ultra-light WhisperX for Railway Free Tier
+# This uses the smallest possible dependencies to avoid build timeouts
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only essential system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy application files
+COPY api.py .
+COPY whisperx ./whisperx/
+COPY pyproject.toml .
+
+# Install minimal dependencies in a single layer to speed up build
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+    torch==2.5.0 \
+    torchaudio==2.5.0 \
+    --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir \
+    fastapi==0.104.0 \
+    uvicorn==0.24.0 \
+    python-multipart==0.0.6 \
+    faster-whisper>=1.1.1 \
+    ctranslate2>=4.5.0 \
+    pyannote-audio>=4.0.0 \
+    transformers>=4.48.0 \
+    nltk>=3.9.1 \
+    numpy>=2.1.0 \
+    pandas>=2.2.3 \
+    omegaconf>=2.3.0 \
+    huggingface-hub>=0.24.0
+
+# Create directories
+RUN mkdir -p /app/input /app/output /app/models
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV WHISPERX_CACHE_DIR=/app/models
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

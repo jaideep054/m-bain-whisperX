@@ -4,7 +4,10 @@
       "Bash(git rm:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(powershell \"Get-PSDrive C | Select-Object Used,Free\")",
+      "Bash(docker system prune:*)",
+      "Bash(git clean:*)"
     ]
   }
 }

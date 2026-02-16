@@ -11,6 +11,8 @@ import tempfile
 import shutil
 from typing import Optional
 import torch
+import json
+import numpy as np
 
 app = FastAPI(
     title="WhisperX API",
@@ -21,11 +23,26 @@ app = FastAPI(
 # Configuration from environment variables
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 COMPUTE_TYPE = "float16" if DEVICE == "cuda" else "int8"
-MODEL_NAME = os.getenv("WHISPERX_MODEL", "base")
+MODEL_NAME = os.getenv("WHISPERX_MODEL", "large-v3")  # Changed from "base" to "large-v3" for better multilingual support
 HF_TOKEN = os.getenv("HF_TOKEN", None)
 
 # Load model on startup
 model = None
+
+def convert_to_serializable(obj):
+    """Convert numpy types to Python native types for JSON serialization"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_to_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_serializable(item) for item in obj]
+    else:
+        return obj
 
 @app.on_event("startup")
 async def startup_event():
@@ -91,22 +108,43 @@ async def transcribe_audio(
 
         # Load and transcribe audio
         audio = whisperx.load_audio(temp_audio_path)
+
+        # Transcribe with explicit language parameter or auto-detect
         result = model.transcribe(audio, batch_size=batch_size, language=language)
 
-        # Align whisper output
-        if result.get("language"):
-            model_a, metadata = whisperx.load_align_model(
-                language_code=result["language"],
-                device=DEVICE
-            )
-            result = whisperx.align(
-                result["segments"],
-                model_a,
-                metadata,
-                audio,
-                DEVICE,
-                return_char_alignments=False
-            )
+        # Determine language code for alignment
+        detected_language = result.get("language")
+        language_code = language if language else detected_language
+
+        # Store original segments
+        segments = result.get("segments", [])
+
+        # Log transcription result
+        print(f"Transcription completed. Detected language: {detected_language}, Using language code: {language_code}")
+
+        # Align whisper output - ALWAYS attempt alignment if we have a language code
+        if language_code:
+            try:
+                model_a, metadata = whisperx.load_align_model(
+                    language_code=language_code,
+                    device=DEVICE
+                )
+                aligned_result = whisperx.align(
+                    segments,
+                    model_a,
+                    metadata,
+                    audio,
+                    DEVICE,
+                    return_char_alignments=False
+                )
+                # Update segments with aligned results
+                segments = aligned_result.get("segments", aligned_result.get("word_segments", segments))
+                print(f"Alignment completed successfully for language: {language_code}")
+            except Exception as align_error:
+                print(f"Warning: Alignment failed for language '{language_code}': {align_error}")
+                # Continue with unaligned results
+        else:
+            print("Warning: No language detected or specified. Skipping alignment.")
 
         # Speaker diarization (if requested)
         if diarize:
@@ -125,13 +163,17 @@ async def transcribe_audio(
                 diarize_kwargs["max_speakers"] = max_speakers
 
             diarize_segments = diarize_model(audio, **diarize_kwargs)
-            result = whisperx.assign_word_speakers(diarize_segments, result)
+            segments_with_speakers = whisperx.assign_word_speakers(diarize_segments, {"segments": segments})
+            segments = segments_with_speakers.get("segments", segments)
+
+        # Convert to serializable format
+        serializable_segments = convert_to_serializable(segments)
 
         return JSONResponse(content={
             "status": "success",
-            "language": result.get("language"),
-            "segments": result.get("segments", []),
-            "word_segments": result.get("word_segments", [])
+            "language": language_code,  # Return the language code that was actually used
+            "detected_language": detected_language,  # Also include what was auto-detected
+            "segments": serializable_segments
         })
 
     except Exception as e:
